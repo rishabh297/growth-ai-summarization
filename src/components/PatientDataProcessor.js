@@ -439,11 +439,11 @@ const PatientDataProcessor = ({ currentUser }) => {
       try {
         console.log('Starting data load...');
         
-        let response = await fetch('/combined_visits_aggregated_dec_summarize_2025.csv');
+        let response = await fetch('https://pjtvlhyapgpbvubxiqfg.supabase.co/storage/v1/object/sign/P3-Data/combined_visits_aggregated_dec_summarize_2025.csv?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9hODUwYmVkOC01NDFlLTQwM2QtOWYyYS05ZjA2NWYzMjRhNzEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJQMy1EYXRhL2NvbWJpbmVkX3Zpc2l0c19hZ2dyZWdhdGVkX2RlY19zdW1tYXJpemVfMjAyNS5jc3YiLCJpYXQiOjE3NjgyNDg1MjEsImV4cCI6MTc5OTc4NDUyMX0.g5zotMBsMfYqjyf3p_tU3eYDKiDlwHXz9lHP739lFLE');
         
         if (!response.ok) {
           console.log('Failed to load from public directory, trying absolute path...');
-          response = await fetch('/Users/rishabhgoel/Desktop/Harvard/Zak Lab/P3 Project/combined_visits_aggregated_dec_summarize_2025.csv');
+          response = await fetch('https://pjtvlhyapgpbvubxiqfg.supabase.co/storage/v1/object/sign/P3-Data/combined_visits_aggregated_dec_summarize_2025.csv?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9hODUwYmVkOC01NDFlLTQwM2QtOWYyYS05ZjA2NWYzMjRhNzEiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJQMy1EYXRhL2NvbWJpbmVkX3Zpc2l0c19hZ2dyZWdhdGVkX2RlY19zdW1tYXJpemVfMjAyNS5jc3YiLCJpYXQiOjE3NjgyNDg1MjEsImV4cCI6MTc5OTc4NDUyMX0.g5zotMBsMfYqjyf3p_tU3eYDKiDlwHXz9lHP739lFLE');
         }
 
         if (!response.ok) {
