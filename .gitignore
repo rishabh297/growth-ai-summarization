@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Build output
+build/
+
+# Patient Data - SENSITIVE - DO NOT COMMIT
+# =========================================
+
+# Server data (patient summaries per user)
+server/data/
+
+# P3 Project Data folder (contains all patient CSVs and medical records)
+P3 Project Data/
+
+# Combined visits data files (contain patient visit info)
+combined_visits_aggregated*.csv
+public/combined_visits_aggregated*.csv
+
+# Patient ID lists
+patient_ids*.txt
+
+# Patient demos/recordings that may contain PHI
+Patient Summarization Tool Demo.mp4
+Growth AI Tool Demo (Jan 10 2026)*
+
+# Reference data from hospitals
+Lab Reference Ranges from Boston Children's Hospital.rtf
+
+# Temporary Excel lock files
+~$*.xlsx
+~$*.xls
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+
+# Misc
+*.log
+.cache/
+
