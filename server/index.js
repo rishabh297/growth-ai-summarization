@@ -195,11 +195,11 @@ app.get('/api/patient-summaries/:patientId', async (req, res) => {
     if (author) {
       // Search in specific author's folder
       const summaries = await readSummariesFromDisk(author);
-      const entry = summaries[patientId];
-      if (!entry) {
-        return res.status(404).json({ message: 'No saved summary for this patient.' });
-      }
-      return res.json(entry);
+    const entry = summaries[patientId];
+    if (!entry) {
+      return res.status(404).json({ message: 'No saved summary for this patient.' });
+    }
+    return res.json(entry);
     } else {
       // Search across all author folders
       const entry = await findPatientSummary(patientId);

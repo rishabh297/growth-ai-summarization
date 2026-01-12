@@ -6,6 +6,7 @@
   "dependencies": {
     "@headlessui/react": "1.7.17",
     "@heroicons/react": "2.0.18",
+    "@supabase/supabase-js": "^2.90.1",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "lodash": "4.17.21",

@@ -8,6 +8,7 @@ import { MagnifyingGlassIcon, UserGroupIcon, ChartBarIcon, ClockIcon, CalendarIc
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { loadICDCodes, lookupICDCode } from '../utils/icdLookup';
+import { supabase } from '../utils/supabase';
 
 const MIN_SUMMARY_PANEL_WIDTH = 360;
 const MAX_SUMMARY_PANEL_WIDTH = 900;
@@ -534,29 +535,37 @@ setPhysicianSummaryText('');
     setSummaryTimerStart(null);
     setSummaryElapsedTime(0);
 
-    // Try to load existing summary from server (only for current user)
+    // Try to load existing summary from Supabase (only for current user)
     const loadSavedSummary = async () => {
       if (!currentUser) return; // Don't load if no user is logged in
       
       try {
         const authorName = sanitizeFilename(currentUser);
-        const response = await fetch(`/api/patient-summaries/${selectedPatientId}?author=${encodeURIComponent(authorName)}`);
-        if (response.ok) {
-          const data = await response.json();
-          if (data.summary) {
-            setPhysicianSummaryText(data.summary);
-            setPhysicianSummaryMeta({
-              savedAt: data.updatedAt || data.savedAt,
-              author: data.author
-            });
-            setPhysicianSummaryStatus({
-              type: 'success',
-              message: `Loaded your saved summary from ${new Date(data.updatedAt || data.savedAt).toLocaleDateString()}`
-            });
-          }
+        const { data, error } = await supabase
+          .from('patient_summaries')
+          .select('*')
+          .eq('patient_id', selectedPatientId)
+          .eq('author', authorName)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          // PGRST116 means no rows found, which is fine
+          console.log('Supabase load error:', error.message);
+        }
+        
+        if (data && data.summary) {
+          setPhysicianSummaryText(data.summary);
+          setPhysicianSummaryMeta({
+            savedAt: data.saved_at,
+            author: data.author
+          });
+          setPhysicianSummaryStatus({
+            type: 'success',
+            message: `Loaded your saved summary from ${new Date(data.saved_at).toLocaleDateString()}`
+          });
         }
       } catch (err) {
-        // Server might not be running - that's okay, just start fresh
+        // Supabase might have issues - that's okay, just start fresh
         console.log('Could not load saved summary:', err.message);
       }
     };
@@ -688,44 +697,30 @@ setPhysicianSummaryText('');
         ? Math.floor((Date.now() - summaryTimerStart) / 1000)
         : 0;
       
-      const payload = {
-        patientId: selectedPatient.patientId,
-        summary: physicianSummaryText,
-        visitCount: recentPhysicianVisits.length,
-        visitsIncluded,
-        savedAt,
-        author: authorName,
-        timeToComplete: {
-          seconds: finalElapsedSeconds,
-          formatted: formatElapsedTime(finalElapsedSeconds),
-          startedAt: summaryTimerStart ? new Date(summaryTimerStart).toISOString() : null
-        }
-      };
+      // Save to Supabase
+      const { error } = await supabase
+        .from('patient_summaries')
+        .upsert({
+          patient_id: selectedPatient.patientId,
+          author: authorName,
+          summary: physicianSummaryText,
+          time_to_complete: finalElapsedSeconds,
+          visits_included: visitsIncluded,
+          saved_at: savedAt
+        }, { onConflict: 'patient_id,author' });
 
-      // Save to server
-      const response = await fetch('/api/patient-summaries', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (response.ok) {
+      if (!error) {
         // Stop the timer
         setSummaryTimerStart(null);
-        
-        const responseData = await response.json();
-        const folderPath = responseData.savedToFolder || `server/data/${authorName}/`;
         
         setPhysicianSummaryMeta({ savedAt, author: authorName, timeToComplete: finalElapsedSeconds });
       setPhysicianSummaryStatus({
         type: 'success',
-          message: `✓ Saved to ${folderPath} (${formatElapsedTime(finalElapsedSeconds)}, ${recentPhysicianVisits.length} visits)`
+          message: `✓ Saved to cloud (${formatElapsedTime(finalElapsedSeconds)}, ${recentPhysicianVisits.length} visits)`
       });
       } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to save');
+        console.error('Supabase save error:', error);
+        throw new Error(error.message || 'Failed to save');
       }
     } catch (error) {
       console.error('Failed to save physician summary:', error);
@@ -3773,8 +3768,8 @@ ${visit.referrals_details ?
                                       onMouseEnter={(e) => handleICDTooltipEnter(e, problem.code, uniqueId, problem.problem)}
                                       onMouseLeave={() => setHoveredCode(null)}
                                     >
-                                      {problem.problem}
-                                    </span>
+                                    {problem.problem}
+                                  </span>
                                   );
                                 })}
                               </div>
@@ -3795,8 +3790,8 @@ ${visit.referrals_details ?
                                       onMouseEnter={(e) => handleICDTooltipEnter(e, problem.code, uniqueId, problem.problem)}
                                       onMouseLeave={() => setHoveredCode(null)}
                                     >
-                                      {problem.problem} ({Math.round(problem.duration * 365)} days)
-                                    </span>
+                                    {problem.problem} ({Math.round(problem.duration * 365)} days)
+                                  </span>
                                   );
                                 })}
                               </div>
