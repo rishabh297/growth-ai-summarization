@@ -1,10 +1,10 @@
-import React, { useState, useEffect, useCallback, Fragment, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, Fragment, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Papa from 'papaparse';
 import _ from 'lodash';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine, Bar, Cell, BarChart } from 'recharts';
-import { Calendar, ChevronDown, ChevronUp, Activity, Clipboard, Pill, Stethoscope, ChevronRight, XIcon } from 'lucide-react';
-import { MagnifyingGlassIcon, UserGroupIcon, ChartBarIcon, ClockIcon, CalendarIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Calendar, ChevronDown, Activity, Clipboard, Pill, Stethoscope, XIcon } from 'lucide-react';
+import { MagnifyingGlassIcon, UserGroupIcon, ChartBarIcon, ClockIcon, MicrophoneIcon } from '@heroicons/react/24/outline';
 import { Dialog, Transition } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { loadICDCodes, lookupICDCode } from '../utils/icdLookup';
