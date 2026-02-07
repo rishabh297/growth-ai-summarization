@@ -133,6 +133,7 @@ const PatientDataProcessor = ({ currentUser }) => {
   const [diagnosisTimelineSort, setDiagnosisTimelineSort] = useState('last');
   const [medicationTimelineSort, setMedicationTimelineSort] = useState('last');
   const [growthPercentiles, setGrowthPercentiles] = useState(null);
+  const [growthChartUnits, setGrowthChartUnits] = useState('metric'); // 'metric' or 'imperial'
   const [problemTimelineSort, setProblemTimelineSort] = useState('last');
   const [visitTimelineSort, setVisitTimelineSort] = useState('desc'); // 'desc' = newest first, 'asc' = oldest first
   const [visitTimelineLimit, setVisitTimelineLimit] = useState('10'); // 'all' or '10' - default to last 10 visits
@@ -235,20 +236,36 @@ const PatientDataProcessor = ({ currentUser }) => {
       .map(visit => {
         const rawWeight = Number(visit.weight);
         const rawHeight = Number(visit.height);
-        const weight = Number.isFinite(rawWeight) && rawWeight > 0
-          ? Number((rawWeight / 16).toFixed(1))
+        // Weight: raw is in ounces, convert to lbs then to kg (1 lb = 0.453592 kg)
+        const weightLbs = Number.isFinite(rawWeight) && rawWeight > 0
+          ? rawWeight / 16
           : null;
-        const height = Number.isFinite(rawHeight) && rawHeight > 0
-          ? Number(rawHeight.toFixed ? rawHeight.toFixed(1) : rawHeight)
+        const weightKg = weightLbs != null
+          ? Number((weightLbs * 0.453592).toFixed(2))
           : null;
-        const bmi = weight != null && height != null
-          ? Number(((weight * 703) / (height * height)).toFixed(1))
+        // Height: raw is in inches, convert to cm (1 inch = 2.54 cm)
+        const heightIn = Number.isFinite(rawHeight) && rawHeight > 0
+          ? rawHeight
+          : null;
+        const heightCm = heightIn != null
+          ? Number((heightIn * 2.54).toFixed(1))
+          : null;
+        // BMI: uses metric formula (kg/m²)
+        const bmi = weightKg != null && heightCm != null
+          ? Number((weightKg / ((heightCm / 100) ** 2)).toFixed(1))
+          : null;
+        // Format date for tooltip display
+        const visitDate = visit.date instanceof Date && !isNaN(visit.date.getTime())
+          ? visit.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
           : null;
         return {
           ageInDays: visit.ageInDays,
-          weight,
-          height,
-          bmi
+          weight: weightLbs ? Number(weightLbs.toFixed(1)) : null, // Keep lbs for CDC chart matching
+          height: heightIn ? Number(heightIn.toFixed(1)) : null, // Keep inches for CDC chart matching
+          weightKg,
+          heightCm,
+          bmi,
+          date: visitDate
         };
       })
       .sort((a, b) => a.ageInDays - b.ageInDays);
@@ -2782,123 +2799,239 @@ ${visit.referrals_details ?
           const vtBmiData = getVisualTimelineGrowthData('bmi');
 
           const percentileStyles = {
-            P3: { color: '#94a3b8', dash: '4 2' },
-            P10: { color: '#64748b', dash: '4 2' },
-            P25: { color: '#475569', dash: '3 2' },
-            P50: { color: '#1e293b', dash: null },
-            P75: { color: '#475569', dash: '3 2' },
-            P90: { color: '#64748b', dash: '4 2' },
-            P97: { color: '#94a3b8', dash: '4 2' }
+            P3: { color: '#94a3b8', dash: '4 2', label: '3%' },
+            P10: { color: '#64748b', dash: '4 2', label: '10%' },
+            P25: { color: '#475569', dash: '3 2', label: '25%' },
+            P50: { color: '#1e293b', dash: null, label: '50%' },
+            P75: { color: '#475569', dash: '3 2', label: '75%' },
+            P90: { color: '#64748b', dash: '4 2', label: '90%' },
+            P97: { color: '#94a3b8', dash: '4 2', label: '97%' }
           };
+
+          // Unit conversion helpers (CDC data is in lbs/inches)
+          const lbsToKg = (lbs) => lbs * 0.453592;
+          const inToCm = (inches) => inches * 2.54;
+
+          // Convert percentile data to metric
+          const convertWeightPercentilesToMetric = (data) => {
+            if (!data) return null;
+            return data.map(d => ({
+              ...d,
+              P3: lbsToKg(d.P3),
+              P10: lbsToKg(d.P10),
+              P25: lbsToKg(d.P25),
+              P50: lbsToKg(d.P50),
+              P75: lbsToKg(d.P75),
+              P90: lbsToKg(d.P90),
+              P97: lbsToKg(d.P97)
+            }));
+          };
+
+          const convertHeightPercentilesToMetric = (data) => {
+            if (!data) return null;
+            return data.map(d => ({
+              ...d,
+              P3: inToCm(d.P3),
+              P10: inToCm(d.P10),
+              P25: inToCm(d.P25),
+              P50: inToCm(d.P50),
+              P75: inToCm(d.P75),
+              P90: inToCm(d.P90),
+              P97: inToCm(d.P97)
+            }));
+          };
+
+          // Get metric percentile data
+          const weightPercentileMetric = convertWeightPercentilesToMetric(vtWeightData.percentileData);
+          const heightPercentileMetric = convertHeightPercentilesToMetric(vtHeightData.percentileData);
+
+          // Custom tooltip for growth charts
+          const GrowthTooltip = ({ active, payload, metricKey, metricUnit, metricLabel }) => {
+            if (!active || !payload || !payload.length) return null;
+            
+            // Find patient data point
+            const patientPoint = payload.find(p => p.dataKey === metricKey);
+            if (!patientPoint || patientPoint.value == null) return null;
+            
+            const data = patientPoint.payload;
+            const metricValue = patientPoint.value;
+            
+            return (
+              <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3 text-sm">
+                {data.date && (
+                  <p className="font-semibold text-gray-900 text-base">{data.date}</p>
+                )}
+                <p className="text-gray-500 text-xs mb-2">Age: {formatAge(data.ageInDays)}</p>
+                <div className="border-t pt-2">
+                  <p className="font-medium text-gray-800">
+                    {metricLabel}: <span className="text-indigo-600">{metricValue.toFixed(1)} {metricUnit}</span>
+                  </p>
+                </div>
+              </div>
+            );
+          };
+
+          // Get unit-specific values based on selection
+          const isMetric = growthChartUnits === 'metric';
+          const weightUnit = isMetric ? 'kg' : 'lbs';
+          const heightUnit = isMetric ? 'cm' : 'in';
+          const weightKey = isMetric ? 'weightKg' : 'weight';
+          const heightKey = isMetric ? 'heightCm' : 'height';
+          const weightPercentileData = isMetric ? weightPercentileMetric : vtWeightData.percentileData;
+          const heightPercentileData = isMetric ? heightPercentileMetric : vtHeightData.percentileData;
 
           return (
         <div className="bg-white rounded-lg shadow-sm p-6">
-              <div className="mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Growth with CDC Percentile Curves</h3>
-              <p className="text-sm text-gray-500">
-                  CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})
-              </p>
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">Growth with CDC Percentile Curves</h3>
+                  <p className="text-sm text-gray-500">
+                    CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})
+                  </p>
                 </div>
+                {/* Unit Toggle */}
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setGrowthChartUnits('metric')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      growthChartUnits === 'metric'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Metric (kg, cm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGrowthChartUnits('imperial')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      growthChartUnits === 'imperial'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Imperial (lbs, in)
+                  </button>
+                </div>
+              </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Weight Chart */}
                 <div>
-                  <h4 className="text-md font-semibold text-gray-700 mb-2">Weight Over Time</h4>
+                  <h4 className="text-md font-semibold text-gray-700 mb-2">Weight Over Time ({weightUnit})</h4>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                      <LineChart margin={{ top: 10, right: 45, bottom: 20, left: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="ageInDays" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatAgeCompact} allowDuplicatedCategory={false} />
-                        <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v}`} width={50} />
-                        <Tooltip formatter={(value, name) => [`${value?.toFixed(1)} lbs`, name]} labelFormatter={(value) => `Age: ${formatAge(value)}`} />
-                        {vtWeightData.percentileData && (
+                        <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v.toFixed(0)}`} width={40} label={{ value: weightUnit, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11, fill: '#6b7280' } }} />
+                        <Tooltip content={<GrowthTooltip metricKey={weightKey} metricUnit={weightUnit} metricLabel="Weight" />} />
+                        {weightPercentileData && (
                           <>
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                            <Line data={vtWeightData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                            <Line data={weightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
-                        <Line data={vtWeightData.patientData} type="natural" dataKey="weight" stroke="#4F46E5" strokeWidth={3} dot={{ r: 4, fill: '#4F46E5' }} activeDot={{ r: 6 }} name="Patient" connectNulls />
+                        <Line data={vtWeightData.patientData.filter(d => d[weightKey])} type="natural" dataKey={weightKey} stroke="#4F46E5" strokeWidth={3} dot={{ r: 5, fill: '#4F46E5', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#4F46E5', strokeWidth: 2, fill: '#fff' }} name="Patient" connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
             </div>
-                  <div className="flex justify-center gap-3 mt-1 text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-800"></span> 50th</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-400"></span> Percentiles</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-1 bg-indigo-600 rounded"></span> Patient</span>
-          </div>
+                  {/* Percentile labels legend */}
+                  <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
+                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
+                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
+                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
+                    <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
+                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
+                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
+                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
+                    <span className="flex items-center gap-1 ml-2 text-indigo-600 font-medium"><span className="w-2 h-2 bg-indigo-600 rounded-full"></span>Patient</span>
+                  </div>
         </div>
 
                 {/* Height Chart */}
                 <div>
-                  <h4 className="text-md font-semibold text-gray-700 mb-2">Height Over Time</h4>
+                  <h4 className="text-md font-semibold text-gray-700 mb-2">Height Over Time ({heightUnit})</h4>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                      <LineChart margin={{ top: 10, right: 45, bottom: 20, left: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="ageInDays" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatAgeCompact} allowDuplicatedCategory={false} />
-                        <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v}"`} width={50} />
-                        <Tooltip formatter={(value, name) => [`${value?.toFixed(1)}"`, name]} labelFormatter={(value) => `Age: ${formatAge(value)}`} />
-                        {vtHeightData.percentileData && (
+                        <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v.toFixed(0)}`} width={40} label={{ value: heightUnit, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11, fill: '#6b7280' } }} />
+                        <Tooltip content={<GrowthTooltip metricKey={heightKey} metricUnit={heightUnit} metricLabel="Height" />} />
+                        {heightPercentileData && (
                           <>
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                            <Line data={vtHeightData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                            <Line data={heightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
-                        <Line data={vtHeightData.patientData.filter(d => d.height)} type="natural" dataKey="height" stroke="#10B981" strokeWidth={3} dot={{ r: 4, fill: '#10B981' }} activeDot={{ r: 6 }} name="Patient" connectNulls />
+                        <Line data={vtHeightData.patientData.filter(d => d[heightKey])} type="natural" dataKey={heightKey} stroke="#10B981" strokeWidth={3} dot={{ r: 5, fill: '#10B981', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#10B981', strokeWidth: 2, fill: '#fff' }} name="Patient" connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex justify-center gap-3 mt-1 text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-800"></span> 50th</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-400"></span> Percentiles</span>
-                    <span className="flex items-center gap-1"><span className="w-3 h-1 bg-emerald-500 rounded"></span> Patient</span>
+                  {/* Percentile labels legend */}
+                  <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
+                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
+                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
+                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
+                    <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
+                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
+                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
+                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
+                    <span className="flex items-center gap-1 ml-2 text-emerald-600 font-medium"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span>Patient</span>
                   </div>
                 </div>
               </div>
 
               {/* BMI Chart */}
               <div className="mt-6">
-                <h4 className="text-md font-semibold text-gray-700 mb-2">BMI Over Time</h4>
+                <h4 className="text-md font-semibold text-gray-700 mb-2">BMI Over Time (kg/m²)</h4>
                 {bmiTrendData.length === 0 ? (
                   <p className="text-sm text-gray-500">BMI cannot be calculated (missing height or weight measurements).</p>
                 ) : (
                   <>
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <LineChart margin={{ top: 10, right: 20, bottom: 20, left: 10 }}>
+                        <LineChart margin={{ top: 10, right: 45, bottom: 20, left: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="ageInDays" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatAgeCompact} allowDuplicatedCategory={false} />
-                          <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v}`} width={40} />
-                          <Tooltip formatter={(value, name) => [`${Number(value).toFixed(1)}`, name]} labelFormatter={(value) => `Age: ${formatAge(value)}`} />
+                          <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v.toFixed(0)}`} width={35} label={{ value: 'kg/m²', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 10, fill: '#6b7280' } }} />
+                          <Tooltip content={<GrowthTooltip metricKey="bmi" metricUnit="kg/m²" metricLabel="BMI" />} />
                           {vtBmiData.percentileData && (
                             <>
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
                             </>
                           )}
-                          <Line data={bmiTrendData} type="natural" dataKey="bmi" stroke="#F97316" strokeWidth={3} dot={{ r: 4, fill: '#F97316' }} activeDot={{ r: 6 }} name="Patient" />
+                          <Line data={bmiTrendData} type="natural" dataKey="bmi" stroke="#F97316" strokeWidth={3} dot={{ r: 5, fill: '#F97316', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#F97316', strokeWidth: 2, fill: '#fff' }} name="Patient" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="flex justify-center gap-3 mt-1 text-xs text-gray-500">
-                      <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-800"></span> 50th</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-slate-400"></span> Percentiles</span>
-                      <span className="flex items-center gap-1"><span className="w-3 h-1 bg-orange-500 rounded"></span> Patient</span>
+                    <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
+                      <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
+                      <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
+                      <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
+                      <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
+                      <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
+                      <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
+                      <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
+                      <span className="flex items-center gap-1 ml-2 text-orange-600 font-medium"><span className="w-2 h-2 bg-orange-500 rounded-full"></span>Patient</span>
                     </div>
                   </>
                 )}
@@ -4097,13 +4230,90 @@ ${visit.referrals_details ?
               P97: { color: '#94a3b8', dash: '4 2' }
             };
 
+            // Unit conversion helpers
+            const lbsToKg = (lbs) => lbs * 0.453592;
+            const inToCm = (inches) => inches * 2.54;
+            const isMetric = growthChartUnits === 'metric';
+            const weightUnit = isMetric ? 'kg' : 'lbs';
+            const heightUnit = isMetric ? 'cm' : 'in';
+
+            // Convert percentile data to metric if needed
+            const convertWeightPercentiles = (data) => {
+              if (!data || !isMetric) return data;
+              return data.map(d => ({
+                ...d,
+                P3: lbsToKg(d.P3),
+                P10: lbsToKg(d.P10),
+                P25: lbsToKg(d.P25),
+                P50: lbsToKg(d.P50),
+                P75: lbsToKg(d.P75),
+                P90: lbsToKg(d.P90),
+                P97: lbsToKg(d.P97)
+              }));
+            };
+
+            const convertHeightPercentiles = (data) => {
+              if (!data || !isMetric) return data;
+              return data.map(d => ({
+                ...d,
+                P3: inToCm(d.P3),
+                P10: inToCm(d.P10),
+                P25: inToCm(d.P25),
+                P50: inToCm(d.P50),
+                P75: inToCm(d.P75),
+                P90: inToCm(d.P90),
+                P97: inToCm(d.P97)
+              }));
+            };
+
+            // Convert patient data for display
+            const convertedWeightPatientData = isMetric 
+              ? weightPatientData.map(d => ({ ...d, weightDisplay: d.weight ? lbsToKg(d.weight) : null }))
+              : weightPatientData.map(d => ({ ...d, weightDisplay: d.weight }));
+            
+            const convertedHeightPatientData = isMetric
+              ? heightPatientData.map(d => ({ ...d, heightDisplay: d.height ? inToCm(d.height) : null }))
+              : heightPatientData.map(d => ({ ...d, heightDisplay: d.height }));
+
+            const displayWeightPercentiles = convertWeightPercentiles(weightPercentiles);
+            const displayHeightPercentiles = convertHeightPercentiles(heightPercentiles);
+
             return (
             <div>
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Growth & Development</h3>
-              <p className="text-sm text-gray-500 mb-4">CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})</p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-800">Growth & Development</h3>
+                  <p className="text-sm text-gray-500">CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})</p>
+                </div>
+                {/* Unit Toggle */}
+                <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
+                  <button
+                    type="button"
+                    onClick={() => setGrowthChartUnits('metric')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      growthChartUnits === 'metric'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Metric (kg, cm)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGrowthChartUnits('imperial')}
+                    className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                      growthChartUnits === 'imperial'
+                        ? 'bg-white text-indigo-600 shadow-sm'
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    Imperial (lbs, in)
+                  </button>
+                </div>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div className="bg-white rounded-lg shadow-sm p-4">
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Weight Over Time</h4>
+                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Weight Over Time ({weightUnit})</h4>
                   <div className="h-96">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
@@ -4117,37 +4327,37 @@ ${visit.referrals_details ?
                         />
                         <YAxis 
                           domain={['auto', 'auto']}
-                          tickFormatter={(v) => `${v} lbs`}
+                          tickFormatter={(v) => `${v.toFixed(0)} ${weightUnit}`}
                           width={70}
                         />
                         <Tooltip 
                           formatter={(value, name) => {
-                            if (name === 'Patient Weight') return [`${value?.toFixed(1)} lbs`, name];
-                            return [`${value?.toFixed(1)} lbs`, name];
+                            if (name === 'Patient Weight') return [`${value?.toFixed(1)} ${weightUnit}`, name];
+                            return [`${value?.toFixed(1)} ${weightUnit}`, name];
                           }}
                           labelFormatter={(value) => `Age: ${formatAge(value)}`}
                         />
                         {/* CDC Percentile curves */}
-                        {weightPercentiles && (
+                        {displayWeightPercentiles && (
                           <>
-                            <Line data={weightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                            <Line data={weightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         {/* Patient's actual weight */}
                         <Line 
-                          data={weightPatientData}
+                          data={convertedWeightPatientData.filter(d => d.weightDisplay)}
                           type="natural" 
-                          dataKey="weight" 
+                          dataKey="weightDisplay" 
                           stroke="#4F46E5" 
                           strokeWidth={3}
-                          dot={{ r: 4, fill: '#4F46E5' }}
-                          activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                          dot={{ r: 5, fill: '#4F46E5', stroke: '#fff', strokeWidth: 2 }}
+                          activeDot={{ r: 7, stroke: '#4F46E5', strokeWidth: 2, fill: '#fff' }}
                           name="Patient Weight"
                           connectNulls
                         />
@@ -4162,7 +4372,7 @@ ${visit.referrals_details ?
                 </div>
                 
                 <div className="bg-white rounded-lg shadow-sm p-4">
-                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Height Over Time</h4>
+                  <h4 className="text-lg font-semibold text-gray-700 mb-2">Height Over Time ({heightUnit})</h4>
                   <div className="h-96">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
@@ -4176,37 +4386,37 @@ ${visit.referrals_details ?
                         />
                         <YAxis 
                           domain={['auto', 'auto']}
-                          tickFormatter={(v) => `${v}"`}
+                          tickFormatter={(v) => `${v.toFixed(0)} ${heightUnit}`}
                           width={60}
                         />
                         <Tooltip 
                           formatter={(value, name) => {
-                            if (name === 'Patient Height') return [`${value?.toFixed(1)}"`, name];
-                            return [`${value?.toFixed(1)}"`, name];
+                            if (name === 'Patient Height') return [`${value?.toFixed(1)} ${heightUnit}`, name];
+                            return [`${value?.toFixed(1)} ${heightUnit}`, name];
                           }}
                           labelFormatter={(value) => `Age: ${formatAge(value)}`}
                         />
                         {/* CDC Percentile curves */}
-                        {heightPercentiles && (
+                        {displayHeightPercentiles && (
                           <>
-                            <Line data={heightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                            <Line data={heightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         {/* Patient's actual height */}
                         <Line 
-                          data={heightPatientData.filter(d => d.height)}
+                          data={convertedHeightPatientData.filter(d => d.heightDisplay)}
                           type="natural" 
-                          dataKey="height" 
+                          dataKey="heightDisplay" 
                           stroke="#10B981" 
                           strokeWidth={3}
-                          dot={{ r: 4, fill: '#10B981' }}
-                          activeDot={{ r: 6, stroke: '#fff', strokeWidth: 2 }}
+                          dot={{ r: 5, fill: '#10B981', stroke: '#fff', strokeWidth: 2 }}
+                          activeDot={{ r: 7, stroke: '#10B981', strokeWidth: 2, fill: '#fff' }}
                           name="Patient Height"
                           connectNulls
                         />
