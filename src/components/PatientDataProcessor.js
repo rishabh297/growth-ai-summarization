@@ -2880,14 +2880,33 @@ ${visit.referrals_details ?
           const weightPercentileData = isMetric ? weightPercentileMetric : vtWeightData.percentileData;
           const heightPercentileData = isMetric ? heightPercentileMetric : vtHeightData.percentileData;
 
+          // Creates a dot renderer that shows a percentile label at the last data point
+          const makeEndLabel = (data, percentileLabel) => (props) => {
+            const { cx, cy, index, stroke } = props;
+            if (index !== data.length - 1) return null;
+            return (
+              <text
+                key={`end-${percentileLabel}`}
+                x={cx + 5}
+                y={cy}
+                fill={stroke}
+                fontSize={9}
+                fontWeight={percentileLabel === '50%' ? 600 : 400}
+                dominantBaseline="middle"
+              >
+                {percentileLabel}
+              </text>
+            );
+          };
+
           return (
         <div className="bg-white rounded-lg shadow-sm p-6">
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-800">Growth with CDC Percentile Curves</h3>
-                  <p className="text-sm text-gray-500">
-                    CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})
-                  </p>
+                <h3 className="text-xl font-bold text-gray-800">Growth with CDC Percentile Curves</h3>
+              <p className="text-sm text-gray-500">
+                  CDC growth percentile curves shown for reference ({selectedPatient?.sex === 'F' ? 'Female' : 'Male'})
+              </p>
                 </div>
                 {/* Unit Toggle */}
                 <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
@@ -2914,7 +2933,7 @@ ${visit.referrals_details ?
                     Imperial (lbs, in)
                   </button>
                 </div>
-              </div>
+                </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Weight Chart */}
@@ -2922,37 +2941,29 @@ ${visit.referrals_details ?
                   <h4 className="text-md font-semibold text-gray-700 mb-2">Weight Over Time ({weightUnit})</h4>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 10, right: 45, bottom: 20, left: 10 }}>
+                      <LineChart margin={{ top: 10, right: 32, bottom: 20, left: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="ageInDays" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatAgeCompact} allowDuplicatedCategory={false} />
                         <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v.toFixed(0)}`} width={40} label={{ value: weightUnit, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11, fill: '#6b7280' } }} />
                         <Tooltip content={<GrowthTooltip metricKey={weightKey} metricUnit={weightUnit} metricLabel="Weight" />} />
                         {weightPercentileData && (
                           <>
-                            <Line data={weightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
-                            <Line data={weightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '3%')} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '10%')} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '25%')} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(weightPercentileData, '50%')} name="50th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '75%')} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '90%')} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={weightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(weightPercentileData, '97%')} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         <Line data={vtWeightData.patientData.filter(d => d[weightKey])} type="natural" dataKey={weightKey} stroke="#4F46E5" strokeWidth={3} dot={{ r: 5, fill: '#4F46E5', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#4F46E5', strokeWidth: 2, fill: '#fff' }} name="Patient" connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
             </div>
-                  {/* Percentile labels legend */}
-                  <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
-                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
-                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
-                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
-                    <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
-                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
-                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
-                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
-                    <span className="flex items-center gap-1 ml-2 text-indigo-600 font-medium"><span className="w-2 h-2 bg-indigo-600 rounded-full"></span>Patient</span>
-                  </div>
+                  <div className="flex justify-center mt-1 text-[10px] text-gray-500">
+                    <span className="flex items-center gap-1 text-indigo-600 font-medium"><span className="w-2 h-2 bg-indigo-600 rounded-full"></span>Patient</span>
+          </div>
         </div>
 
                 {/* Height Chart */}
@@ -2960,36 +2971,28 @@ ${visit.referrals_details ?
                   <h4 className="text-md font-semibold text-gray-700 mb-2">Height Over Time ({heightUnit})</h4>
                   <div className="h-80">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 10, right: 45, bottom: 20, left: 10 }}>
+                      <LineChart margin={{ top: 10, right: 32, bottom: 20, left: 10 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="ageInDays" type="number" domain={['dataMin', 'dataMax']} tickFormatter={formatAgeCompact} allowDuplicatedCategory={false} />
                         <YAxis domain={['auto', 'auto']} tickFormatter={(v) => `${v.toFixed(0)}`} width={40} label={{ value: heightUnit, angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fontSize: 11, fill: '#6b7280' } }} />
                         <Tooltip content={<GrowthTooltip metricKey={heightKey} metricUnit={heightUnit} metricLabel="Height" />} />
                         {heightPercentileData && (
                           <>
-                            <Line data={heightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
-                            <Line data={heightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '3%')} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '10%')} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '25%')} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(heightPercentileData, '50%')} name="50th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '75%')} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '90%')} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={heightPercentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(heightPercentileData, '97%')} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         <Line data={vtHeightData.patientData.filter(d => d[heightKey])} type="natural" dataKey={heightKey} stroke="#10B981" strokeWidth={3} dot={{ r: 5, fill: '#10B981', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#10B981', strokeWidth: 2, fill: '#fff' }} name="Patient" connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  {/* Percentile labels legend */}
-                  <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
-                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
-                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
-                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
-                    <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
-                    <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
-                    <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
-                    <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
-                    <span className="flex items-center gap-1 ml-2 text-emerald-600 font-medium"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span>Patient</span>
+                  <div className="flex justify-center mt-1 text-[10px] text-gray-500">
+                    <span className="flex items-center gap-1 text-emerald-600 font-medium"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span>Patient</span>
                   </div>
                 </div>
               </div>
@@ -3010,28 +3013,21 @@ ${visit.referrals_details ?
                           <Tooltip content={<GrowthTooltip metricKey="bmi" metricUnit="kg/m²" metricLabel="BMI" />} />
                           {vtBmiData.percentileData && (
                             <>
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
-                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '3%')} name="3rd" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '10%')} name="10th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '25%')} name="25th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(vtBmiData.percentileData, '50%')} name="50th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '75%')} name="75th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '90%')} name="90th" connectNulls isAnimationActive={false} />
+                              <Line data={vtBmiData.percentileData} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(vtBmiData.percentileData, '97%')} name="97th" connectNulls isAnimationActive={false} />
                             </>
                           )}
                           <Line data={bmiTrendData} type="natural" dataKey="bmi" stroke="#F97316" strokeWidth={3} dot={{ r: 5, fill: '#F97316', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 7, stroke: '#F97316', strokeWidth: 2, fill: '#fff' }} name="Patient" />
                         </LineChart>
                       </ResponsiveContainer>
                     </div>
-                    <div className="flex flex-wrap justify-center gap-2 mt-2 text-[10px]">
-                      <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>3%</span>
-                      <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>10%</span>
-                      <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>25%</span>
-                      <span className="flex items-center gap-1 text-gray-800 font-semibold"><span className="w-4 h-0.5 bg-slate-800"></span>50%</span>
-                      <span className="flex items-center gap-1 text-gray-600"><span className="w-4 h-px bg-slate-600" style={{backgroundImage: 'linear-gradient(90deg, #475569 50%, transparent 50%)', backgroundSize: '5px 1px'}}></span>75%</span>
-                      <span className="flex items-center gap-1 text-gray-500"><span className="w-4 h-px bg-slate-500" style={{backgroundImage: 'linear-gradient(90deg, #64748b 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>90%</span>
-                      <span className="flex items-center gap-1 text-gray-400"><span className="w-4 h-px bg-slate-400" style={{backgroundImage: 'linear-gradient(90deg, #94a3b8 60%, transparent 60%)', backgroundSize: '6px 1px'}}></span>97%</span>
-                      <span className="flex items-center gap-1 ml-2 text-orange-600 font-medium"><span className="w-2 h-2 bg-orange-500 rounded-full"></span>Patient</span>
+                    <div className="flex justify-center mt-1 text-[10px] text-gray-500">
+                      <span className="flex items-center gap-1 text-orange-600 font-medium"><span className="w-2 h-2 bg-orange-500 rounded-full"></span>Patient</span>
                     </div>
                   </>
                 )}
@@ -3311,12 +3307,12 @@ ${visit.referrals_details ?
             <div className="flex flex-col sm:flex-row sm:items-center sm:space-x-3 text-xs text-gray-500">
               {physicianSummaryMeta?.savedAt ? (
                 <>
-                  <span>
-                    Saved {new Date(physicianSummaryMeta.savedAt).toLocaleString()}
-                  </span>
-                  {physicianSummaryMeta?.author && (
-                    <span className="sm:mt-0 mt-1">
-                      By {physicianSummaryMeta.author.charAt(0).toUpperCase() + physicianSummaryMeta.author.slice(1)}
+                <span>
+                  Saved {new Date(physicianSummaryMeta.savedAt).toLocaleString()}
+                </span>
+              {physicianSummaryMeta?.author && (
+                <span className="sm:mt-0 mt-1">
+                  By {physicianSummaryMeta.author.charAt(0).toUpperCase() + physicianSummaryMeta.author.slice(1)}
                     </span>
                   )}
                 </>
@@ -4278,6 +4274,25 @@ ${visit.referrals_details ?
             const displayWeightPercentiles = convertWeightPercentiles(weightPercentiles);
             const displayHeightPercentiles = convertHeightPercentiles(heightPercentiles);
 
+            // Creates a dot renderer that shows a percentile label at the last data point
+            const makeEndLabel = (data, percentileLabel) => (props) => {
+              const { cx, cy, index, stroke } = props;
+              if (index !== data.length - 1) return null;
+              return (
+                <text
+                  key={`end-${percentileLabel}`}
+                  x={cx + 5}
+                  y={cy}
+                  fill={stroke}
+                  fontSize={9}
+                  fontWeight={percentileLabel === '50%' ? 600 : 400}
+                  dominantBaseline="middle"
+                >
+                  {percentileLabel}
+                </text>
+              );
+            };
+
             return (
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -4316,7 +4331,7 @@ ${visit.referrals_details ?
                   <h4 className="text-lg font-semibold text-gray-700 mb-2">Weight Over Time ({weightUnit})</h4>
                   <div className="h-96">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+                      <LineChart margin={{ top: 20, right: 35, bottom: 20, left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
                           dataKey="ageInDays" 
@@ -4340,13 +4355,13 @@ ${visit.referrals_details ?
                         {/* CDC Percentile curves */}
                         {displayWeightPercentiles && (
                           <>
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
-                            <Line data={displayWeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '3%')} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '10%')} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '25%')} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(displayWeightPercentiles, '50%')} name="50th (median)" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '75%')} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '90%')} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={displayWeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(displayWeightPercentiles, '97%')} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         {/* Patient's actual weight */}
@@ -4364,10 +4379,8 @@ ${visit.referrals_details ?
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-800"></span> 50th</span>
-                    <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-500 border-dashed"></span> 3rd/10th/25th/75th/90th/97th</span>
-                    <span className="flex items-center gap-1"><span className="w-4 h-1 bg-indigo-600 rounded"></span> Patient</span>
+                  <div className="flex justify-center mt-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1 text-indigo-600 font-medium"><span className="w-2 h-2 bg-indigo-600 rounded-full"></span> Patient</span>
                   </div>
                 </div>
                 
@@ -4375,7 +4388,7 @@ ${visit.referrals_details ?
                   <h4 className="text-lg font-semibold text-gray-700 mb-2">Height Over Time ({heightUnit})</h4>
                   <div className="h-96">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart margin={{ top: 20, right: 30, bottom: 20, left: 20 }}>
+                      <LineChart margin={{ top: 20, right: 35, bottom: 20, left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis 
                           dataKey="ageInDays" 
@@ -4399,13 +4412,13 @@ ${visit.referrals_details ?
                         {/* CDC Percentile curves */}
                         {displayHeightPercentiles && (
                           <>
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls isAnimationActive={false} />
-                            <Line data={displayHeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '3%')} name="3rd" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '10%')} name="10th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '25%')} name="25th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(displayHeightPercentiles, '50%')} name="50th (median)" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '75%')} name="75th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '90%')} name="90th" connectNulls isAnimationActive={false} />
+                            <Line data={displayHeightPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(displayHeightPercentiles, '97%')} name="97th" connectNulls isAnimationActive={false} />
                           </>
                         )}
                         {/* Patient's actual height */}
@@ -4423,10 +4436,8 @@ ${visit.referrals_details ?
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs text-gray-500">
-                    <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-800"></span> 50th</span>
-                    <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-500 border-dashed"></span> Percentiles</span>
-                    <span className="flex items-center gap-1"><span className="w-4 h-1 bg-emerald-500 rounded"></span> Patient</span>
+                  <div className="flex justify-center mt-1 text-xs text-gray-500">
+                    <span className="flex items-center gap-1 text-emerald-600 font-medium"><span className="w-2 h-2 bg-emerald-500 rounded-full"></span> Patient</span>
                   </div>
                 </div>
               </div>
@@ -4460,13 +4471,13 @@ ${visit.referrals_details ?
                         {/* CDC BMI Percentile curves */}
                         {bmiPercentiles && (
                           <>
-                            <Line data={bmiPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={false} name="3rd" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={false} name="10th" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={false} name="25th" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={false} name="50th (median)" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={false} name="75th" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={false} name="90th" connectNulls />
-                            <Line data={bmiPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={false} name="97th" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P3" stroke={percentileStyles.P3.color} strokeDasharray={percentileStyles.P3.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '3%')} name="3rd" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P10" stroke={percentileStyles.P10.color} strokeDasharray={percentileStyles.P10.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '10%')} name="10th" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P25" stroke={percentileStyles.P25.color} strokeDasharray={percentileStyles.P25.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '25%')} name="25th" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P50" stroke={percentileStyles.P50.color} strokeWidth={2} dot={makeEndLabel(bmiPercentiles, '50%')} name="50th (median)" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P75" stroke={percentileStyles.P75.color} strokeDasharray={percentileStyles.P75.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '75%')} name="75th" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P90" stroke={percentileStyles.P90.color} strokeDasharray={percentileStyles.P90.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '90%')} name="90th" connectNulls />
+                            <Line data={bmiPercentiles} type="natural" dataKey="P97" stroke={percentileStyles.P97.color} strokeDasharray={percentileStyles.P97.dash} strokeWidth={1} dot={makeEndLabel(bmiPercentiles, '97%')} name="97th" connectNulls />
                           </>
                         )}
                         {/* Patient's actual BMI */}
@@ -4484,10 +4495,8 @@ ${visit.referrals_details ?
                     </ResponsiveContainer>
                   </div>
                 )}
-                <div className="flex flex-wrap justify-center gap-3 mt-2 text-xs text-gray-500">
-                  <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-800"></span> 50th</span>
-                  <span className="flex items-center gap-1"><span className="w-4 h-0.5 bg-slate-500 border-dashed"></span> Percentiles</span>
-                  <span className="flex items-center gap-1"><span className="w-4 h-1 bg-orange-500 rounded"></span> Patient</span>
+                <div className="flex justify-center mt-1 text-xs text-gray-500">
+                  <span className="flex items-center gap-1 text-orange-600 font-medium"><span className="w-2 h-2 bg-orange-500 rounded-full"></span> Patient</span>
               </div>
             </div>
             </div>
